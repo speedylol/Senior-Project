@@ -1,12 +1,13 @@
+/*This source code copyrighted by Lazy Foo' Productions (2004-2015)
+and may not be redistributed without written permission.*/
+
 //Using SDL, SDL_image, standard IO, and strings
 #include <SDL.h>
 #include <SDL_image.h>
 #include <stdio.h>
 #include <string>
-
-//Dimension of the level
-const int LEVEL_WIDTH = 1280;
-const int LEVEL_HEIGHT = 960;
+#include <cstdlib>
+#include <ctime>
 
 //Screen dimension constants
 const int SCREEN_WIDTH = 640;
@@ -24,20 +25,26 @@ class LTexture
 
 		//Loads image at specified path
 		bool loadFromFile( std::string path );
+		
+		#ifdef _SDL_TTF_H
+		//Creates image from font string
+		bool loadFromRenderedText( std::string textureText, SDL_Color textColor );
+		#endif
 
 		//Deallocates texture
 		void free();
 
 		//Set color modulation
-		void setColor( Uint8 red, Uint8 green, Uint8 blue);
+		void setColor( Uint8 red, Uint8 green, Uint8 blue );
 
-		//Set the blending
+		//Set blending
 		void setBlendMode( SDL_BlendMode blending );
 
+		//Set alpha modulation 
 		void setAlpha( Uint8 alpha );
-
+		
 		//Renders texture at given point
-		void render( int x, int y, SDL_Rect* clip = NULL);
+		void render( int x, int y, SDL_Rect* clip = NULL, double angle = 0.0, SDL_Point* center = NULL, SDL_RendererFlip flip = SDL_FLIP_NONE );
 
 		//Gets image dimensions
 		int getWidth();
@@ -52,6 +59,71 @@ class LTexture
 		int mHeight;
 };
 
+//The application time based timer
+class LTimer
+{
+    public:
+		//Initializes variables
+		LTimer();
+
+		//The various clock actions
+		void start();
+		void stop();
+		void pause();
+		void unpause();
+
+		//Gets the timer's time
+		Uint32 getTicks();
+
+		//Checks the status of the timer
+		bool isStarted();
+		bool isPaused();
+
+    private:
+		//The clock time when the timer started
+		Uint32 mStartTicks;
+
+		//The ticks stored whenww the timer was paused
+		Uint32 mPausedTicks;
+
+		//The timer status
+		bool mPaused;
+		bool mStarted;
+};
+
+//The dot that will move around on the screen
+class Dot
+{
+    public:
+		//The dimensions of the dot
+		static const int DOT_WIDTH = 35;
+		static const int DOT_HEIGHT = 35;
+
+		//Maximum axis velocity of the dot
+		static const int DOT_VEL = 13;
+
+		//Initializes the variables wwwwwwwww
+		Dot();
+
+		//Takes key presses and adjusts the dot's velocity
+		void handleEvent( SDL_Event& e );
+
+		//Moves the dot
+		void move(SDL_Rect& wall, SDL_Rect& wall2);
+
+		//Shows the dot on the screen
+		void render();
+
+    private:
+		//The X and Y offsets of the dot
+		int mPosX, mPosY;
+
+		//The velocity of the dot
+		int mVelX, mVelY;
+
+		//players collision box
+		SDL_Rect mCollider;
+};
 
 //Starts up SDL and creates window
 bool init();
@@ -62,8 +134,11 @@ bool loadMedia();
 //Frees media and shuts down SDL
 void close();
 
-//Box collision detector
+//Box collision detector 
 bool checkCollision( SDL_Rect a, SDL_Rect b );
+
+bool gameOver = false;
+bool quit = false;
 
 //The window we'll be rendering to
 SDL_Window* gWindow = NULL;
@@ -72,17 +147,7 @@ SDL_Window* gWindow = NULL;
 SDL_Renderer* gRenderer = NULL;
 
 //Scene textures
-LTexture gFooTexture;
-LTexture gBackgroundTexture;
-LTexture gModulatedTexture;
-
-//Scene sprites
-const int WALKING_ANIMATION_FRAMES = 4;
-SDL_Rect gSpriteClips[ WALKING_ANIMATION_FRAMES ];
-
-LTexture gPlayerTexture;
-LTexture gSpriteSheetTexture;
-
+LTexture gDotTexture;
 
 LTexture::LTexture()
 {
@@ -139,136 +204,7 @@ bool LTexture::loadFromFile( std::string path )
 	return mTexture != NULL;
 }
 
-/*
-	Class to represent the player
-*/
 
-class Player
-{
-public:
-	static const int PLAYER_WIDTH = 20;
-	static const int PLAYER_HEIGHT = 20;
-
-	static const int PLAYER_VEL = 2;
-
-	Player();
-
-	void handleEvent( SDL_Event& e);
-
-	void move();
-
-	void render();
-
-private:
-	//the X and Y offsets of the player
-	int mPosX, mPosY;
-
-	//The velocity of the player
-	int mVelX, mVelY;
-};
-
-Player::Player() {
-
-	mPosX = 0;
-	mPosY = 0;
-
-	mVelX = 0;
-	mVelY = 0;
-}
-
-
-
-void Player::handleEvent( SDL_Event& e ) 
-{
-	//if a key is pressed
-	if(e.type == SDL_KEYDOWN && e.key.repeat == 0 )
-	{
-		switch(e.key.keysym.sym)
-		{
-
-		case SDLK_w: mVelY -= PLAYER_VEL; break;
-		case SDLK_s: mVelY += PLAYER_VEL; break;
-		case SDLK_a: mVelX -= PLAYER_VEL; break;
-		case SDLK_d: mVelX += PLAYER_VEL; break;
-
-		}
-	} else if( e.type == SDL_KEYUP && e.key.repeat == 0) {
-
-		switch( e.key.keysym.sym )
-		{
-
-		case SDLK_w: mVelY -= PLAYER_VEL; break;
-		case SDLK_s: mVelY += PLAYER_VEL; break;
-		case SDLK_a: mVelX -= PLAYER_VEL; break;
-		case SDLK_d: mVelX += PLAYER_VEL; break;
-
-		}
-	}
-}
-
-void Player::move() 
-{
-
-	mPosX += mVelX;
-
-	if( (mPosX < 0) || (mPosX + PLAYER_WIDTH > SCREEN_WIDTH)) {
-		mPosX -= mVelX;
-	}
-
-	mPosY += mVelY;
-	if( (mPosY < 0) || (mPosY + PLAYER_HEIGHT > SCREEN_HEIGHT)) {
-		mPosY -= mVelY;
-	}
-}
-
-void Player::render() 
-{
-	gPlayerTexture.render( mPosX, mPosY );
-}
-
-/*
-	Funtions of the LTexture class
-*/
-
-void LTexture::setColor(Uint8 red, Uint8 green, Uint8 blue) 
-{
-	SDL_SetTextureColorMod( mTexture, red, green, blue);
-}
-
-void LTexture::setBlendMode( SDL_BlendMode blending ) 
-{
-	SDL_SetTextureBlendMode( mTexture, blending);
-}
-
-void LTexture::setAlpha( Uint8 alpha ) 
-{
-	SDL_SetTextureAlphaMod( mTexture, alpha );
-}
-
-void LTexture::render( int x, int y, SDL_Rect* clip)
-{
-	//Set rendering space and render to screen
-	SDL_Rect renderQuad = { x, y, mWidth, mHeight };
-
-	//Set clip rendering dimensions
-	if( clip != NULL ) {
-		renderQuad.w = clip->w;
-		renderQuad.h = clip->h;
-	}
-
-	//render to screen
-	SDL_RenderCopy( gRenderer, mTexture, clip, &renderQuad);
-}
-
-int LTexture::getWidth()
-{
-	return mWidth;
-}
-
-int LTexture::getHeight()
-{
-	return mHeight;
-}
 
 void LTexture::free()
 {
@@ -281,6 +217,138 @@ void LTexture::free()
 		mHeight = 0;
 	}
 }
+
+void LTexture::setColor( Uint8 red, Uint8 green, Uint8 blue )
+{
+	//Modulate texture rgb
+	SDL_SetTextureColorMod( mTexture, red, green, blue );
+}
+
+void LTexture::setBlendMode( SDL_BlendMode blending )
+{
+	//Set blending function
+	SDL_SetTextureBlendMode( mTexture, blending );
+}
+		
+void LTexture::setAlpha( Uint8 alpha )
+{
+	//Modulate texture alpha
+	SDL_SetTextureAlphaMod( mTexture, alpha );
+}
+
+void LTexture::render( int x, int y, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip )
+{
+	//Set rendering space and render to screen
+	SDL_Rect renderQuad = { x, y, mWidth, mHeight };
+
+	//Set clip rendering dimensions
+	if( clip != NULL )
+	{
+		renderQuad.w = clip->w;
+		renderQuad.h = clip->h;
+	}
+
+	//Render to screen
+	SDL_RenderCopyEx( gRenderer, mTexture, clip, &renderQuad, angle, center, flip );
+}
+
+int LTexture::getWidth()
+{
+	return mWidth;
+}
+
+int LTexture::getHeight()
+{
+	return mHeight;
+}
+
+
+Dot::Dot()
+{
+    //Initialize the offsets
+    mPosX = 70;
+    mPosY = 220;
+
+    //Initialize the velocity
+    mVelX = 0;
+    mVelY = 0;
+
+	mCollider.w = DOT_WIDTH;
+	mCollider.h = DOT_HEIGHT;
+}
+
+void Dot::handleEvent( SDL_Event& e )
+{
+    //If a key was pressed
+	if( e.type == SDL_KEYDOWN && e.key.repeat == 0 )
+    {
+        //Adjust the velocity
+        switch( e.key.keysym.sym )
+        {
+            case SDLK_w: mVelY -= DOT_VEL; break;
+            case SDLK_s: mVelY += DOT_VEL; break;
+            case SDLK_a: mVelX -= DOT_VEL; break;
+            case SDLK_d: mVelX += DOT_VEL; break;
+        }
+    }
+    //If a key was released
+    else if( e.type == SDL_KEYUP && e.key.repeat == 0 )
+    {
+        //Adjust the velocity
+        switch( e.key.keysym.sym )
+        {
+            case SDLK_w: mVelY += DOT_VEL; break;
+            case SDLK_s: mVelY -= DOT_VEL; break;
+            case SDLK_a: mVelX += DOT_VEL; break;
+            case SDLK_d: mVelX -= DOT_VEL; break;
+        }
+    }
+
+	
+}
+
+void Dot::move(SDL_Rect& wall, SDL_Rect& wall2)
+{
+    //Move the dot left or right
+    mPosX += mVelX;
+	mCollider.x = mPosX;
+
+    //If the dot collided or went too far to the left or right
+    if( ( mPosX < 0 ) || ( mPosX + DOT_WIDTH > SCREEN_WIDTH ) ||
+		checkCollision( mCollider, wall ) ||
+		checkCollision(mCollider, wall2))
+    {
+        //Move back
+        mPosX -= mVelX;
+		mCollider.x = mPosX;
+
+		quit = true;
+    }
+
+    //Move the dot up or down
+    mPosY += mVelY;
+	mCollider.y = mPosY;
+
+    //If the dot collided or went too far up or down
+    if( ( mPosY < 0 ) || ( mPosY + DOT_HEIGHT > SCREEN_HEIGHT ) || 
+		checkCollision( mCollider, wall ) ||
+		checkCollision( mCollider, wall2))
+    {
+        //Move back
+        mPosY -= mVelY;
+		mCollider.y = mPosY;
+
+		quit = true;
+    }
+	mPosY += 5;
+}
+
+void Dot::render()
+{
+    //Show the dot
+	gDotTexture.render( mPosX, mPosY );
+}
+
 
 
 bool init()
@@ -311,8 +379,8 @@ bool init()
 		}
 		else
 		{
-			//Create renderer for window
-			gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+			//Create vsynced renderer for window
+			gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC );
 			if( gRenderer == NULL )
 			{
 				printf( "Renderer could not be created! SDL Error: %s\n", SDL_GetError() );
@@ -342,80 +410,20 @@ bool loadMedia()
 	//Loading success flag
 	bool success = true;
 
-	//Load Foo' texture
-	if( !gSpriteSheetTexture.loadFromFile("foo2.png")) {
-		success = false;
-	} else {
-
-		//Set sprite clips
-		gSpriteClips[0].x = 0;
-		gSpriteClips[0].y = 0;
-		gSpriteClips[0].w = 90;
-		gSpriteClips[0].h = 104;
-
-		gSpriteClips[1].x = 90;
-		gSpriteClips[1].y = 0;
-		gSpriteClips[1].w = 105;
-		gSpriteClips[1].h = 104;
-
-		gSpriteClips[2].x = 195;
-		gSpriteClips[2].y = 0;
-		gSpriteClips[2].w = 75;
-		gSpriteClips[2].h = 104;
-
-		gSpriteClips[3].x = 270;
-		gSpriteClips[3].y = 0;
-		gSpriteClips[3].w = 90;
-		gSpriteClips[3].h = 104;
-	}
-
-	if( !gBackgroundTexture.loadFromFile("bg.png")) {
+	//Load dot texture
+	if( !gDotTexture.loadFromFile( "cards.png" ) )
+	{
+		printf( "Failed to load dot texture!\n" );
 		success = false;
 	}
 
 	return success;
 }
 
-bool checkCollision( SDL_Rect a, SDL_Rect b) 
-{
-	//sides of the rectangles
-	int leftA, leftB;
-	int rightA, rightB;
-	int topA, topB;
-	int bottomA, bottomB;
-
-	//calculating sides of Rectangle A
-	leftA = a.x;
-	rightA = a.x + a.w;
-	topA = a.y;
-	bottomA = a.y + a.h;
-
-	//calculating the sides of Rectangle B
-	leftB = b.x;
-	rightB = b.x + b.w;
-	topB = b.y;
-	bottomB = b.y + b.h;
-
-	if( bottomA <= topB )
-		return false;
-
-	if( topA >= bottomB)
-		return false;
-
-	if( rightA <= leftB )
-		return false;
-
-	if( leftA >= rightB )
-		return false;
-
-	return true;
-}
-
 void close()
 {
 	//Free loaded images
-	gFooTexture.free();
-	gBackgroundTexture.free();
+	gDotTexture.free();
 
 	//Destroy window	
 	SDL_DestroyRenderer( gRenderer );
@@ -428,9 +436,53 @@ void close()
 	SDL_Quit();
 }
 
+bool checkCollision( SDL_Rect a, SDL_Rect b )
+{
+    //The sides of the rectangles
+    int leftA, leftB;
+    int rightA, rightB;
+    int topA, topB;
+    int bottomA, bottomB;
+
+    //Calculate the sides of rect A
+    leftA = a.x;
+    rightA = a.x + a.w;
+    topA = a.y;
+    bottomA = a.y + a.h;
+
+    //Calculate the sides of rect B
+    leftB = b.x;
+    rightB = b.x + b.w;
+    topB = b.y;
+    bottomB = b.y + b.h;
+
+    //If any of the sides from A are outside of B
+    if( bottomA <= topB )
+    {
+        return false;
+    }
+
+    if( topA >= bottomB )
+    {
+        return false;
+    }
+
+    if( rightA <= leftB )
+    {
+        return false;
+    }
+
+    if( leftA >= rightB )
+    {
+        return false;
+    }
+
+    //If none of the sides from A are outside B
+    return true;
+}
+
 int main( int argc, char* args[] )
 {
-
 	//Start up SDL and create window
 	if( !init() )
 	{
@@ -446,31 +498,27 @@ int main( int argc, char* args[] )
 		else
 		{	
 			//Main loop flag
-			bool quit = false;
-			bool walking = false;
+			
 
 			//Event handler
 			SDL_Event e;
 
-			Player player;
-
-			SDL_Rect camera = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
-
-			const int velX = 10;
-
-			int frame = 0;
-			int x = 0;
-			int y = 0;
-
-			SDL_Rect collider = gSpriteClips[frame];
+			//The dot that will be moving around on the screen
+			Dot dot;
 
 			SDL_Rect wall;
-			wall.x = 300;
-			wall.y = 40;
-			wall.w = 40;
-			wall.h = 400; 
+			wall.x = 540;
+			wall.y = 260;
+			wall.w = 100;
+			wall.h = SCREEN_HEIGHT - wall.y; 
 
-			//While application is running
+			SDL_Rect wall2;
+			wall2.x = 540;
+			wall2.y = 0;
+			wall2.w = 100;
+			wall2.h = SCREEN_HEIGHT - (wall.h + 150);
+
+			//While application is running wwww
 			while( !quit )
 			{
 				//Handle events on queue
@@ -480,81 +528,48 @@ int main( int argc, char* args[] )
 					if( e.type == SDL_QUIT )
 					{
 						quit = true;
-					} else {
-						
-						if(e.type == SDL_KEYDOWN) {
-							
-							switch(e.key.keysym.sym) {
-							case SDLK_w: y -= 30; break;
-							case SDLK_d: walking = true; x += velX; break;
-							case SDLK_a: walking = true; x -= velX; break;
-
-							}
-						} else if( e.type == SDL_KEYUP) {
-							walking = false;
-						}
 					}
 
+					//Handle input for the dot
+					dot.handleEvent( e );
+					
+					//wwwwww
 				}
 
-				collider.x = x;
+				wall.x -= 5;
+				wall2.x -= 5;
 
-				if( x < 0 || ( x + 90 > LEVEL_WIDTH ) || checkCollision(collider, wall)) {
-					x -= velX;
-					collider.x = x;
+				if(wall.x + wall.w < 0) {
+
+					srand(time(NULL));
+					wall.x = wall2.x = 640;
+					int newY = rand() % 300 + 100;
+					
+					wall.y = newY;
+					wall.h = SCREEN_HEIGHT - wall.y; 
+					wall2.h =  SCREEN_HEIGHT - (wall.h + 150);
+					
 				}
-				
 
-				camera.x = (x + 90 / 2 ) - SCREEN_WIDTH / 2;
-				camera.y = (y + 104 / 2 ) - SCREEN_HEIGHT / 2;
+				//Move the dot
+				dot.move(wall, wall2);
 
-				if(camera.x < 0)
-					camera.x = 0;
-
-				if(camera.y < 0)
-					camera.y = 0;
-
-				if( camera.x > LEVEL_WIDTH - camera.w )
-					camera.x = LEVEL_WIDTH - camera.w;
-
-				if( camera.y > LEVEL_HEIGHT - camera.h)
-					camera.y = LEVEL_HEIGHT - camera.h;
-
+				gameOver = true;
 				//Clear screen
 				SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
-				SDL_RenderClear( gRenderer );	
+				SDL_RenderClear( gRenderer );
 
-				gBackgroundTexture.render(0, 0, &camera);
-				
-				//Render current frame
-				SDL_Rect* currentClip = &gSpriteClips[ frame / 4 ];
-				gSpriteSheetTexture.render(  (x - camera.x),  (y - camera.y) + 366, currentClip );
-
-
-				// gSpriteSheetTexture.render( (10) + x, ( (SCREEN_HEIGHT - currentClip->h ) / 2) + y, currentClip );
+				//Render objects
+				dot.render();
 
 				SDL_SetRenderDrawColor( gRenderer, 0x00, 0x00, 0x00, 0xFF);
 				SDL_RenderDrawRect( gRenderer, &wall); 
 
+				SDL_SetRenderDrawColor( gRenderer, 0x00, 0x00, 0x00, 0xFF);
+				SDL_RenderDrawRect( gRenderer, &wall2);
+
 				//Update screen
 				SDL_RenderPresent( gRenderer );
-
-				
-
-				if(walking) {
-					//Go to next frame
-					++frame;
-
-					//Cycle animation
-					if( frame / 4 >= WALKING_ANIMATION_FRAMES )
-					{
-						frame = 0;
-					}
-				} else {
-					frame = 0;
-				}
-				
-				
 			}
 		}
 	}

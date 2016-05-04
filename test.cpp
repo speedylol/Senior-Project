@@ -1,9 +1,6 @@
-/*This source code copyrighted by Lazy Foo' Productions (2004-2015)
-and may not be redistributed without written permission.*/
-
-//Using SDL, SDL_image, standard IO, and strings
 #include <SDL.h>
 #include <SDL_image.h>
+#include <SDL_ttf.h>
 #include <stdio.h>
 #include <string>
 #include <cstdlib>
@@ -44,7 +41,7 @@ class LTexture
 		void setAlpha( Uint8 alpha );
 		
 		//Renders texture at given point
-		void render( int x, int y, SDL_Rect* clip = NULL, double angle = 0.0, SDL_Point* center = NULL, SDL_RendererFlip flip = SDL_FLIP_NONE );
+		void render( int x, int y, SDL_Rect* clip = NULL);
 
 		//Gets image dimensions
 		int getWidth();
@@ -125,6 +122,8 @@ class Dot
 		SDL_Rect mCollider;
 };
 
+
+
 //Starts up SDL and creates window
 bool init();
 
@@ -137,6 +136,10 @@ void close();
 //Box collision detector 
 bool checkCollision( SDL_Rect a, SDL_Rect b );
 
+//Game functions
+void flappybird();
+void restart();
+
 bool gameOver = false;
 bool quit = false;
 
@@ -146,14 +149,22 @@ SDL_Window* gWindow = NULL;
 //The window renderer
 SDL_Renderer* gRenderer = NULL;
 
+SDL_Texture* pipe = NULL;
 //Scene textures
+LTexture gMenu;
+LTexture gBackground;
 LTexture gDotTexture;
+LTexture gPipe;
+LTexture gPipe2;
+LTexture gRetry;
+
+SDL_Event e;
 
 LTexture::LTexture()
 {
 	//Initialize
 	mTexture = NULL;
-	mWidth = 0;
+	mWidth = 100;
 	mHeight = 0;
 }
 
@@ -236,7 +247,7 @@ void LTexture::setAlpha( Uint8 alpha )
 	SDL_SetTextureAlphaMod( mTexture, alpha );
 }
 
-void LTexture::render( int x, int y, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip )
+void LTexture::render( int x, int y, SDL_Rect* clip)
 {
 	//Set rendering space and render to screen
 	SDL_Rect renderQuad = { x, y, mWidth, mHeight };
@@ -249,7 +260,7 @@ void LTexture::render( int x, int y, SDL_Rect* clip, double angle, SDL_Point* ce
 	}
 
 	//Render to screen
-	SDL_RenderCopyEx( gRenderer, mTexture, clip, &renderQuad, angle, center, flip );
+	SDL_RenderCopy( gRenderer, mTexture, clip, &renderQuad );
 }
 
 int LTexture::getWidth()
@@ -322,7 +333,14 @@ void Dot::move(SDL_Rect& wall, SDL_Rect& wall2)
         mPosX -= mVelX;
 		mCollider.x = mPosX;
 
-		quit = true;
+		gameOver = true;
+
+		/*SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
+		SDL_RenderClear( gRenderer );
+
+		gRetry.render(320, 180);
+
+		SDL_RenderPresent(gRenderer);*/
     }
 
     //Move the dot up or down
@@ -334,12 +352,16 @@ void Dot::move(SDL_Rect& wall, SDL_Rect& wall2)
 		checkCollision( mCollider, wall ) ||
 		checkCollision( mCollider, wall2))
     {
-        //Move back
-        mPosY -= mVelY;
-		mCollider.y = mPosY;
+        gameOver = true;
 
-		quit = true;
+		/*SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
+		SDL_RenderClear( gRenderer );
+		gRetry.render(300, 240);
+
+		SDL_RenderPresent(gRenderer); */
+
     }
+
 	mPosY += 5;
 }
 
@@ -371,7 +393,13 @@ bool init()
 		}
 
 		//Create window
-		gWindow = SDL_CreateWindow( "SDL Tutorial", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN );
+		gWindow = SDL_CreateWindow( "Speedy Senior Project", 
+			SDL_WINDOWPOS_UNDEFINED,
+			SDL_WINDOWPOS_UNDEFINED, 
+			SCREEN_WIDTH, 
+			SCREEN_HEIGHT,
+			SDL_WINDOW_SHOWN );
+
 		if( gWindow == NULL )
 		{
 			printf( "Window could not be created! SDL Error: %s\n", SDL_GetError() );
@@ -411,9 +439,27 @@ bool loadMedia()
 	bool success = true;
 
 	//Load dot texture
+	if( !gMenu.loadFromFile("gamebg.png") ){
+		success = false;
+	}
+	if( !gBackground.loadFromFile("cloudbg.gif")) {
+		success = false;
+	}
 	if( !gDotTexture.loadFromFile( "cards.png" ) )
 	{
 		printf( "Failed to load dot texture!\n" );
+		success = false;
+	}
+
+	if( !gPipe.loadFromFile("pipe.png")){
+		success = false;
+	}
+
+	if( !gPipe2.loadFromFile("pipe2.png")) {
+		success = false;
+	}
+	
+	if( !gRetry.loadFromFile("endgame.png") ){
 		success = false;
 	}
 
@@ -424,6 +470,10 @@ void close()
 {
 	//Free loaded images
 	gDotTexture.free();
+	gPipe.free();
+	gMenu.free();
+	gBackground.free();
+	gRetry.free();
 
 	//Destroy window	
 	SDL_DestroyRenderer( gRenderer );
@@ -498,13 +548,50 @@ int main( int argc, char* args[] )
 		else
 		{	
 			//Main loop flag
+			bool start = false;
+
+			while(!start) {
+
+				while( SDL_PollEvent( &e ) != 0 )
+				{
+					//User requests quit
+					if( e.key.keysym.sym == SDLK_v )
+					{
+						start = true;
+						flappybird();
+					}
+
+				}
+
+				
+				SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
+				SDL_RenderClear( gRenderer );
+
+				gMenu.render(0,0);
+
+				SDL_RenderPresent( gRenderer );
+			} 
+			
 			
 
-			//Event handler
-			SDL_Event e;
+			
+		}
+	}
+
+	//Free resources and close SDL
+	close();
+
+	return 0;
+}
+
+void flappybird() {			
 
 			//The dot that will be moving around on the screen
 			Dot dot;
+
+			bool startOver = false;
+			int x = 340;
+			int y = 260;
 
 			SDL_Rect wall;
 			wall.x = 540;
@@ -518,64 +605,80 @@ int main( int argc, char* args[] )
 			wall2.w = 100;
 			wall2.h = SCREEN_HEIGHT - (wall.h + 150);
 
-			//While application is running wwww
-			while( !quit )
+	while( !quit )
+	{
+			//Handle events on queue
+		while( SDL_PollEvent( &e ) != 0 )
 			{
-				//Handle events on queue
-				while( SDL_PollEvent( &e ) != 0 )
+				//User requests quit
+				if( e.type == SDL_QUIT )
 				{
-					//User requests quit
-					if( e.type == SDL_QUIT )
-					{
 						quit = true;
-					}
-
-					//Handle input for the dot
-					dot.handleEvent( e );
-					
-					//wwwwww
 				}
 
-				wall.x -= 5;
-				wall2.x -= 5;
+				//Handle input for the dot
+				dot.handleEvent( e );
+			}
 
-				if(wall.x + wall.w < 0) {
+			if(wall.x + wall.w < 0) {
 
-					srand(time(NULL));
-					wall.x = wall2.x = 640;
-					int newY = rand() % 300 + 100;
+				srand(time(NULL));
+				wall.x = wall2.x = 640;
+				int newY = rand() % 200 + 200;
 					
-					wall.y = newY;
-					wall.h = SCREEN_HEIGHT - wall.y; 
-					wall2.h =  SCREEN_HEIGHT - (wall.h + 150);
+				wall.y = newY;
+				wall.h = SCREEN_HEIGHT - wall.y; 
+				wall2.h =  SCREEN_HEIGHT - (wall.h + 150);
 					
+			} 
+			wall.x -= 5;
+			wall2.x -= 5;
+
+			//Move the dot
+			dot.move(wall, wall2);
+
+			if( gameOver ) {
+				SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
+				SDL_RenderClear( gRenderer );
+				gRetry.render(200, 90);
+
+				switch(e.key.keysym.sym) {
+				case SDLK_z:
+					startOver = true;
+					break;
+
+				case SDLK_x:
+					close();
+					break;
 				}
+				SDL_RenderPresent(gRenderer); 
 
-				//Move the dot
-				dot.move(wall, wall2);
+				
+			} else {
 
-				gameOver = true;
 				//Clear screen
 				SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
 				SDL_RenderClear( gRenderer );
 
+				gBackground.render(0,0);
+
 				//Render objects
 				dot.render();
-
-				SDL_SetRenderDrawColor( gRenderer, 0x00, 0x00, 0x00, 0xFF);
-				SDL_RenderDrawRect( gRenderer, &wall); 
-
-				SDL_SetRenderDrawColor( gRenderer, 0x00, 0x00, 0x00, 0xFF);
-				SDL_RenderDrawRect( gRenderer, &wall2);
-
+				
+				gPipe.render(wall.x, wall.y);
+				gPipe2.render(wall2.x,
+					(wall2.h - (wall.h + SCREEN_HEIGHT - (wall.h + 150))));
+				
+				printf("y: %d\n", (wall2.h - (wall.h + 90)));
 				//Update screen
 				SDL_RenderPresent( gRenderer );
 			}
-		}
+
+			if(startOver)
+				restart();
 	}
+}
 
-	//Free resources and close SDL
-	close();
-
-	return 0;
+void restart() {
+	flappybird();
 }
